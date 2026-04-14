@@ -1,8 +1,9 @@
 defmodule Pulquex.Challenge do
-  defstruct [:salt, :nonce, :difficulty]
+  defstruct [:id, :salt, :nonce, :difficulty]
 
   def new(difficulty \\ 4) do
     %__MODULE__{
+      id: :crypto.strong_rand_bytes(32) |> Base.encode16(),
       nonce: 0,
       difficulty: difficulty,
       salt: Pulquex.Salt.new()
