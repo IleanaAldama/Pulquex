@@ -22,7 +22,8 @@ defmodule Pulquex.MixProject do
   defp deps do
     [
       {:joken, "~> 2.6"},
-      {:plug, "~> 1.19"}
+      {:plug, "~> 1.19"},
+      {:phoenix, "~> 1.8"}
     ]
   end
 end
