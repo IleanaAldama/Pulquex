@@ -1,0 +1,47 @@
+<script>
+(async function() {
+  const salt        = "<%= salt %>";
+  const difficulty  = <%= difficulty %>;
+  const challengeId = "<%= challenge_id %>";
+  const redirectTo  = "<%= redirect_to %>";
+
+  async function sha256(str) {
+    const buf  = new TextEncoder().encode(str);
+    const hash = await crypto.subtle.digest('SHA-256', buf);
+    return new Uint8Array(hash);
+  }
+
+  function leadingZeroNibbles(bytes) {
+    let count = 0;
+    for (const byte of bytes) {
+      const hi = (byte >> 4) & 0xf;
+      const lo = byte & 0xf;
+      if (hi !== 0) return count; count++;
+      if (lo !== 0) return count; count++;
+    }
+    return count;
+  }
+
+  let nonce = 0;
+  while (true) {
+    const hash = await sha256(salt + String(nonce));
+    if (leadingZeroNibbles(hash) >= difficulty) {
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '/_pulquex/verify';
+      [['challenge_id', challengeId], ['nonce', nonce], ['redirect_to', redirectTo]]
+        .forEach(([k, v]) => {
+          const i    = document.createElement('input');
+          i.type     = 'hidden';
+          i.name     = k;
+          i.value    = v;
+          form.appendChild(i);
+        });
+      document.body.appendChild(form);
+      form.submit();
+      return;
+    }
+    nonce++;
+  }
+})();
+</script>
