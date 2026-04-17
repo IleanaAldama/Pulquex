@@ -1,10 +1,12 @@
 defmodule PulquexWeb.Router do
   use Plug.Router
+  import Plug.Conn
 
   plug(:match)
   plug(:dispatch)
 
   post "/verify" do
-    PulquexWeb.Plug.verify_challenge(conn)
+    conn
+    |> resp(200, "OK")
   end
 end

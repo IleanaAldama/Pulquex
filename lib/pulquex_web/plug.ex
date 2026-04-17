@@ -2,8 +2,10 @@ defmodule PulquexWeb.Plug do
   @behaviour Plug
 
   import Plug.Conn
+  require Logger
 
   @cookie "pulquex-token"
+  @verify_path "/_pulquex/verify"
 
   @impl true
   def init(opts) do
@@ -17,13 +19,23 @@ defmodule PulquexWeb.Plug do
   end
 
   @impl true
-  def call(conn, config) do
-    conn = put_private(conn, :pulquex_config, config)
+  def call(%{request_path: @verify_path, method: "POST"} = conn, config) do
+    verify_challenge(conn, config)
+  end
 
+  def call(conn, config) do
     cond do
-      exempt?(conn, config) -> conn
-      valid_token?(conn, config) -> conn
-      true -> issue_challenge(conn, config)
+      exempt?(conn, config) ->
+        Logger.debug("Pulquex: Exempt path #{conn.request_path}")
+        conn
+
+      valid_token?(conn, config) ->
+        Logger.debug("Pulquex: Valid token for #{conn.request_path}")
+        conn
+
+      true ->
+        Logger.debug("Pulquex: Issuing challenge for #{conn.request_path}")
+        issue_challenge(conn, config)
     end
   end
 
@@ -47,8 +59,11 @@ defmodule PulquexWeb.Plug do
     challenge = Pulquex.Challenge.new(config.difficulty)
     Pulquex.Storage.insert(challenge, config.ttl)
 
+    Logger.debug(
+      "Pulquex: Issued challenge #{challenge.id} with difficulty #{challenge.difficulty}"
+    )
+
     conn
-    |> put_private(:pulquex_config, config)
     |> config.renderer.render(%{
       salt: challenge.salt,
       difficulty: challenge.difficulty,
@@ -64,8 +79,8 @@ defmodule PulquexWeb.Plug do
     })
   end
 
-  def verify_challenge(conn) do
-    config = conn.private[:pulquex_config]
+  def verify_challenge(conn, config) do
+    Logger.debug("Pulquex: Verifying challenge for #{conn.request_path}")
 
     with {:ok, id} <- Map.fetch(conn.body_params, "challenge_id"),
          {:ok, nonce} <- fetch_nonce(conn),
@@ -75,13 +90,19 @@ defmodule PulquexWeb.Plug do
       Pulquex.Storage.mark_as_used(id)
       redirect_to = Map.get(conn.body_params, "redirect_to", "/")
 
+      Logger.debug(
+        "Pulquex: Challenge #{id} solved, issuing token and redirecting to #{redirect_to}"
+      )
+
       conn
       |> put_resp_cookie(@cookie, token, http_only: true, same_site: "Lax", max_age: config.ttl)
       |> put_resp_header("location", redirect_to)
       |> send_resp(302, "")
       |> halt()
     else
-      _ ->
+      error ->
+        Logger.warning("Pulquex: Challenge verification failed: #{inspect(error)}")
+
         conn
         |> send_resp(403, "challenge failed")
         |> halt()
